@@ -20,11 +20,11 @@ Format:
 Length:
 {length}
 
-Do not answer using information not in the context.
+Do not answer using information not present in the provided context.
 
 Example:
-Q: "How long does delivery take for an order within serviceable pin codes?"
-A: "Delivery typically takes 10 to 30 minutes depending on delivery zone and current order volume."
+Q: How long does delivery take for an order within serviceable pin codes?
+A: Delivery typically takes 10 to 30 minutes depending on delivery zone and current order volume.
 
 Now answer the following.
 Q: {query}

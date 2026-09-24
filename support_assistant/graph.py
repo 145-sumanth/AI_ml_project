@@ -162,7 +162,8 @@ def direct_answer(state: State) -> State:
     """Return a canned direct answer used for non-retrieval responses."""
     state["answer"] = "I can only answer questions about Zepto policies right now."
     state["sources"] = []
-    state["confidence"] = 0.0
+    # Per spec, mock direct_answer should return confidence = 1.0
+    state["confidence"] = 1.0
     return state
 
 
