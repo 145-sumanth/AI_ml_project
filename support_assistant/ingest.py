@@ -53,8 +53,21 @@ def main() -> None:
     model = SentenceTransformer("all-MiniLM-L6-v2")
 
     # Create a persistent Chroma client that stores its database under ./chroma_db
-    settings = Settings(chroma_db_impl="duckdb+parquet", persist_directory=str(PERSIST_DIR))
-    client = chromadb.Client(settings=settings)
+    # Newer chromadb versions may deprecate certain Settings; try the preferred Settings call
+    try:
+        settings = Settings(chroma_db_impl="duckdb+parquet", persist_directory=str(PERSIST_DIR))
+        client = chromadb.Client(settings=settings)
+    except Exception as exc:
+        # Fall back to a more tolerant client creation so ingestion can proceed in this environment
+        print('Warning: chromadb.Settings client creation failed:', exc)
+        try:
+            # Try PersistentClient fallback (some chromadb versions provide this)
+            client = chromadb.PersistentClient(persist_directory=str(PERSIST_DIR))
+            print('Using chromadb.PersistentClient fallback')
+        except Exception:
+            # Final fallback to in-memory client (non-persistent)
+            print('PersistentClient not available; falling back to chromadb.Client() (in-memory).')
+            client = chromadb.Client()
 
     # If the collection already exists, delete it so runs are idempotent and reproducible
     try:
@@ -83,11 +96,35 @@ def main() -> None:
         print("No embeddings were created; exiting.")
         return
 
-    # Add vectors to the collection and persist to disk
+    # Add vectors to the collection
     collection.add(ids=ids, documents=texts, embeddings=embeddings, metadatas=metadatas)
-    client.persist()
 
-    print(f"Ingested {len(ids)} documents into persistent ChromaDB collection '{COLLECTION_NAME}'")
+    # Persist if the client implementation supports it (some chromadb clients are in-memory)
+    if hasattr(client, 'persist') and callable(getattr(client, 'persist')):
+        client.persist()
+        print('Persisted ChromaDB collection to disk')
+    else:
+        print('Warning: chromadb client has no persist() method; collection is in-memory for this run')
+
+    # ALSO write a fallback JSON with ids, texts, and embeddings so other processes
+    # (the FastAPI server) can load the same vectors even if chromadb persistence
+    # is unavailable in this environment.
+    try:
+        import json
+        fallback_dir = PERSIST_DIR
+        fallback_dir.mkdir(parents=True, exist_ok=True)
+        fallback_path = fallback_dir / 'fallback.json'
+        fallback_data = [
+            {'id': i, 'text': t, 'embedding': e}
+            for i, t, e in zip(ids, texts, embeddings)
+        ]
+        with open(fallback_path, 'w', encoding='utf-8') as fh:
+            json.dump(fallback_data, fh, ensure_ascii=False, indent=2)
+        print(f'Wrote fallback JSON with {len(fallback_data)} docs to', fallback_path)
+    except Exception as exc:
+        print('Failed to write fallback JSON:', exc)
+
+    print(f"Ingested {len(ids)} documents into ChromaDB collection '{COLLECTION_NAME}'")
 
 
 if __name__ == "__main__":

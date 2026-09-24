@@ -54,11 +54,45 @@ _CLIENT = chromadb.Client()
 try:
     _COLLECTION = _CLIENT.get_collection(name=_COLLECTION_NAME)
 except Exception:
-    # If it doesn't exist, create an empty collection with the requested metadata
+    # If it doesn't exist, try to create an empty collection with the requested metadata
     try:
         _COLLECTION = _CLIENT.create_collection(name=_COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
     except Exception:
         _COLLECTION = None
+
+# Build an in-memory fallback by preferring a persisted fallback.json (written by ingest.py),
+# or else by loading local docs and embedding them.
+_FALLBACK_DOCS = None
+try:
+    from pathlib import Path
+    base_dir = Path(__file__).resolve().parent
+    persist_dir = base_dir / "chroma_db"
+    fallback_path = persist_dir / 'fallback.json'
+    if fallback_path.exists():
+        import json
+        with open(fallback_path, 'r', encoding='utf-8') as fh:
+            data = json.load(fh)
+        # Ensure embeddings are numeric lists
+        _FALLBACK_DOCS = []
+        for item in data:
+            emb = item.get('embedding')
+            _FALLBACK_DOCS.append({"id": item.get('id'), "text": item.get('text'), "embedding": emb})
+        print(f"Loaded {_FALLBACK_DOCS.__len__()} fallback docs from {fallback_path}")
+    else:
+        docs_dir = base_dir / "docs"
+        _FALLBACK_DOCS = []
+        for p in sorted(docs_dir.glob('doc_*.txt')):
+            text = p.read_text(encoding='utf-8')
+            try:
+                emb = _MODEL.encode([text], show_progress_bar=False)[0].tolist()
+            except Exception:
+                emb = None
+            _FALLBACK_DOCS.append({"id": p.stem, "text": text, "embedding": emb})
+        if _FALLBACK_DOCS:
+            print(f"Built {_FALLBACK_DOCS.__len__()} fallback docs by embedding local files")
+except Exception as exc:
+    print('Fallback in-memory doc load failed:', exc)
+    _FALLBACK_DOCS = None
 
 
 def classify_intent(state: State) -> State:
@@ -113,34 +147,99 @@ def retrieve_and_answer(state: State) -> State:
         return state
 
     # Embed the query and run a cosine-based search
-    q_emb = _MODEL.encode([query], show_progress_bar=False)[0].tolist()
+    q_emb = _MODEL.encode([query], show_progress_bar=False)[0]
 
-    try:
-        result = _COLLECTION.query(query_embeddings=[q_emb], n_results=3, include=["documents", "ids", "metadatas"]) 
-    except Exception as exc:
-        # Some chroma clients use slightly different method names; try a safe wrapper
+    # If a real chroma collection exists, use it
+    if _COLLECTION is not None:
         try:
-            result = _COLLECTION.query(queries=[query], n_results=3)
-        except Exception:
-            state["answer"] = f"Retrieval failed: {exc}"
+            # Use a conservative include list; some chroma versions reject 'ids' as an include
+            result = _COLLECTION.query(query_embeddings=[q_emb.tolist()], n_results=3, include=["documents", "metadatas"]) 
+        except Exception as exc:
+            # If chroma query fails, fall back to the in-memory docs if available
+            if _FALLBACK_DOCS:
+                # use in-memory fallback
+                import numpy as np
+                qv = np.array(q_emb)
+                sims = []
+                for d in _FALLBACK_DOCS:
+                    dv = np.array(d['embedding'])
+                    denom = (np.linalg.norm(qv) * np.linalg.norm(dv))
+                    sim = float(np.dot(qv, dv) / denom) if denom != 0 else 0.0
+                    sims.append((sim, d))
+                sims.sort(key=lambda x: x[0], reverse=True)
+                topk = sims[:3]
+                docs = [d['text'] for _, d in topk]
+                ids = [d['id'] for _, d in topk]
+            else:
+                # Some chroma clients use slightly different method names; try a safe wrapper
+                try:
+                    result = _COLLECTION.query(queries=[query], n_results=3)
+                except Exception:
+                    state["answer"] = f"Retrieval failed: {exc}"
+                    state["sources"] = []
+                    state["confidence"] = 0.0
+                    return state
+
+        # result is typically a dict with list entries per query
+        docs = []
+        ids = []
+        if isinstance(result, dict):
+            docs = result.get("documents", [[]])[0]
+            ids = result.get("ids", [[]])[0]
+        else:
+            # fallback: try to parse
+            try:
+                docs = result["documents"][0]
+                ids = result["ids"][0]
+            except Exception:
+                docs = []
+                ids = []
+
+        # If chroma returned no documents but we have a fallback, use it
+        if (not docs) and _FALLBACK_DOCS:
+            import numpy as np
+            qv = np.array(q_emb)
+            sims = []
+            for d in _FALLBACK_DOCS:
+                dv = np.array(d['embedding'])
+                denom = (np.linalg.norm(qv) * np.linalg.norm(dv))
+                sim = float(np.dot(qv, dv) / denom) if denom != 0 else 0.0
+                sims.append((sim, d))
+            sims.sort(key=lambda x: x[0], reverse=True)
+            try:
+                top_debug = [(round(float(s),4), dd['id']) for s, dd in sims[:5]]
+                print('Chroma returned empty; fallback retrieval sims (top):', top_debug)
+            except Exception:
+                pass
+            topk = sims[:3]
+            docs = [d['text'] for _,d in topk]
+            ids = [d['id'] for _,d in topk]
+    else:
+        # Use in-memory fallback retrieval based on cosine similarity with precomputed embeddings
+        if not _FALLBACK_DOCS:
+            state["answer"] = "No knowledge collection is available. Please run ingest.py first."
             state["sources"] = []
             state["confidence"] = 0.0
             return state
-
-    # result is typically a dict with list entries per query
-    docs = []
-    ids = []
-    if isinstance(result, dict):
-        docs = result.get("documents", [[]])[0]
-        ids = result.get("ids", [[]])[0]
-    else:
-        # fallback: try to parse
+        import numpy as np
+        qv = np.array(q_emb)
+        sims = []
+        for d in _FALLBACK_DOCS:
+            dv = np.array(d['embedding'])
+            # cosine similarity
+            denom = (np.linalg.norm(qv) * np.linalg.norm(dv))
+            sim = float(np.dot(qv, dv) / denom) if denom != 0 else 0.0
+            sims.append((sim, d))
+        sims.sort(key=lambda x: x[0], reverse=True)
+        # Log top similarities for debugging
         try:
-            docs = result["documents"][0]
-            ids = result["ids"][0]
+            top_debug = [(round(float(s),4), dd['id']) for s, dd in sims[:5]]
+            print('Retrieval sims (top):', top_debug)
         except Exception:
-            docs = []
-            ids = []
+            pass
+        topk = sims[:3]
+        docs = [d['text'] for _,d in topk]
+        ids = [d['id'] for _,d in topk]
 
     if not docs:
         state["answer"] = "No relevant documents were found in the knowledge base."
