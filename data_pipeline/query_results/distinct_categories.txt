@@ -1,0 +1,6 @@
+SELECT DISTINCT category_id FROM books ORDER BY category_id;
+
+ category_id
+           1
+           2
+           3

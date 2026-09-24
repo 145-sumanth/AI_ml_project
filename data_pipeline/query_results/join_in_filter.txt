@@ -1,0 +1,13 @@
+SELECT b.title, b.price_gbp, c.category_name FROM books b JOIN categories c ON c.category_id = b.category_id WHERE c.category_name IN ('Fiction', 'Mystery') ORDER BY b.price_gbp DESC LIMIT 10;
+
+                                                                   title  price_gbp category_name
+                                           Boar Island (Anna Pigeon #19)      59.48       Mystery
+  The No. 1 Ladies' Detective Agency (No. 1 Ladies' Detective Agency #1)      57.70       Mystery
+                                                     The Past Never Ends      56.50       Mystery
+                   Murder at the 42nd Street Library (Raymond Ambler #1)      54.36       Mystery
+                                          The Last Mile (Amos Decker #2)      54.21       Mystery
+                                     1st to Die (Women's Murder Club #1)      53.98       Mystery
+The Bachelor Girl's Guide to Murder (Herringford and Watts Mysteries #1)      52.30       Mystery
+                                  A Time of Torment (Charlie Parker #14)      48.35       Mystery
+                                                           Sharp Objects      47.82       Mystery
+                         The Murder of Roger Ackroyd (Hercule Poirot #4)      44.10       Mystery
