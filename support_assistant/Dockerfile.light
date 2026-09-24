@@ -1,0 +1,20 @@
+FROM python:3.11-slim
+
+# Lightweight build: do NOT pre-download the embedding model or run ingestion at build time.
+# This makes the image build much faster and moves the model download to a controlled run-time step.
+WORKDIR /app/support_assistant
+
+# Copy module and requirements
+COPY support_assistant /app/support_assistant
+COPY support_assistant/requirements.txt /app/support_assistant/requirements.txt
+
+# Install system deps and Python requirements
+RUN apt-get update && apt-get install -y --no-install-recommends gcc build-essential libpq-dev \
+    && python -m pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r /app/support_assistant/requirements.txt \
+    && rm -rf /var/lib/apt/lists/*
+
+EXPOSE 7860
+
+# Default command runs the API. To build the index, run ingest.py in the container or override CMD.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
