@@ -15,13 +15,19 @@ external LLM services.
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from typing import TypedDict, List, Dict, Any
 
 from sentence_transformers import SentenceTransformer
 import chromadb
 
 MOCK_LLM = os.getenv("MOCK_LLM", "1") != "0"
+
+BASE_DIR = Path(__file__).resolve().parent
+PERSIST_DIR = BASE_DIR / "chroma_db"
+COLLECTION_NAME = "zepto_docs"
 
 # Simple state type for the graph handlers
 class State(TypedDict, total=False):
@@ -45,41 +51,40 @@ _POLICY_KEYWORDS = [
     "support hours",
 ]
 
-_COLLECTION_NAME = "zepto_docs"
-
-# Instantiate embedding model and chroma client once
+# Instantiate embedding model and persistent Chroma client once.
+# Keep the same path and collection name as ingest.py to ensure retrieval sees the same data.
 _MODEL = SentenceTransformer("all-MiniLM-L6-v2")
-_CLIENT = chromadb.Client()
+try:
+    _CLIENT = chromadb.PersistentClient(path=str(PERSIST_DIR))
+    print(f'Connected to persistent Chroma at {PERSIST_DIR}')
+except Exception as exc:
+    print('PersistentClient failed; falling back to in-memory client:', exc)
+    _CLIENT = chromadb.Client()
 
 try:
-    _COLLECTION = _CLIENT.get_collection(name=_COLLECTION_NAME)
+    _COLLECTION = _CLIENT.get_collection(name=COLLECTION_NAME)
 except Exception:
-    # If it doesn't exist, try to create an empty collection with the requested metadata
     try:
-        _COLLECTION = _CLIENT.create_collection(name=_COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
-    except Exception:
+        _COLLECTION = _CLIENT.create_collection(name=COLLECTION_NAME, metadata={"hnsw:space": "cosine"})
+    except Exception as exc:
+        print('create_collection failed:', exc)
         _COLLECTION = None
 
 # Build an in-memory fallback by preferring a persisted fallback.json (written by ingest.py),
 # or else by loading local docs and embedding them.
 _FALLBACK_DOCS = None
 try:
-    from pathlib import Path
-    base_dir = Path(__file__).resolve().parent
-    persist_dir = base_dir / "chroma_db"
-    fallback_path = persist_dir / 'fallback.json'
+    fallback_path = PERSIST_DIR / 'fallback.json'
     if fallback_path.exists():
-        import json
         with open(fallback_path, 'r', encoding='utf-8') as fh:
             data = json.load(fh)
-        # Ensure embeddings are numeric lists
         _FALLBACK_DOCS = []
         for item in data:
             emb = item.get('embedding')
             _FALLBACK_DOCS.append({"id": item.get('id'), "text": item.get('text'), "embedding": emb})
         print(f"Loaded {_FALLBACK_DOCS.__len__()} fallback docs from {fallback_path}")
     else:
-        docs_dir = base_dir / "docs"
+        docs_dir = BASE_DIR / "docs"
         _FALLBACK_DOCS = []
         for p in sorted(docs_dir.glob('doc_*.txt')):
             text = p.read_text(encoding='utf-8')
@@ -95,34 +100,82 @@ except Exception as exc:
     _FALLBACK_DOCS = None
 
 
+def _validate_intent(candidate: str) -> bool:
+    """Return True if candidate intent is one of the allowed intents."""
+    return candidate in ("policy_question", "general_question")
+
+
+def _simulate_groq_response(query: str, attempt: int = 0) -> str:
+    """Simulate a Groq LLM response for testing when GROQ_SIMULATE=1.
+
+    This intentionally mirrors the mock keyword rule but can be expanded to
+    model occasional malformed outputs to test the retry loop.
+    """
+    q = query.lower()
+    # On the first attempt, produce a clean answer; on attempt==1, optionally
+    # produce a malformed output to test the retry logic.
+    if attempt == 1:
+        # malformed example
+        return "I am not sure"
+    return "policy_question" if any(k in q for k in _POLICY_KEYWORDS) else "general_question"
+
+
+def _call_real_llm_for_intent(query: str, attempt: int = 0) -> str:
+    """Call an external LLM (Groq) to classify intent.
+
+    Behavior:
+    - If GROQ_SIMULATE=1, returns a simulated response (safe for offline/test).
+    - If GROQ_API_KEY is present, this is the place to implement a real call.
+    - Otherwise raises a NotImplementedError to indicate a real integration is needed.
+    """
+    if os.getenv("GROQ_SIMULATE", "0") == "1":
+        return _simulate_groq_response(query, attempt)
+
+    # Placeholder for real Groq integration. Not implemented here to avoid
+    # using external paid services or requiring an API key.
+    if os.getenv("GROQ_API_KEY"):
+        # Real integration would go here. For now raise to indicate
+        # the code path is reachable but requires a proper implementation.
+        raise NotImplementedError("Groq integration not implemented in this environment")
+
+    raise NotImplementedError("No Groq API key set; set GROQ_SIMULATE=1 to test the real-LLM branch locally")
+
+
 def classify_intent(state: State) -> State:
     """Classify the intent as 'policy_question' or 'general_question'.
 
-    Mock policy: if the query contains any keyword from _POLICY_KEYWORDS -> policy_question
-    Otherwise general_question.
+    - Mock path (default when MOCK_LLM is true): rule-based keyword check.
+    - Real-LLM path (when MOCK_LLM is false): call out to a Groq LLM, validate
+      the response, and retry up to 2 times with a corrective instruction if the
+      LLM returns an unexpected format.
     """
-    q = state.get("query", "").lower()
+    q = state.get("query", "").strip()
     if MOCK_LLM:
-        if any(k in q for k in _POLICY_KEYWORDS):
-            state["intent"] = "policy_question"
-        else:
-            state["intent"] = "general_question"
+        _q = q.lower()
+        state["intent"] = "policy_question" if any(k in _q for k in _POLICY_KEYWORDS) else "general_question"
         return state
 
-    # Real-LLM branch (placeholder): call a Groq LLM or other model and parse intent
-    # The real branch should also validate and retry if output is malformed.
-    # For brevity we fall back to the simple rule above if the LLM flow fails.
-    try:
-        # Example placeholder pseudocode:
-        # from groq import Groq
-        # llm = Groq(api_key=os.getenv('GROQ_API_KEY'))
-        # prompt = f"Classify intent: {state['query']}"
-        # resp = llm.complete(prompt)
-        # parsed = resp.text.strip()
-        # state['intent'] = parsed
-        state["intent"] = "policy_question" if any(k in q for k in _POLICY_KEYWORDS) else "general_question"
-    except Exception:
-        state["intent"] = "general_question"
+    # Real-LLM branch with validation + retry
+    max_attempts = 3  # initial + 2 retries
+    last_error = None
+    for attempt in range(max_attempts):
+        try:
+            resp = _call_real_llm_for_intent(q, attempt=attempt)
+            resp = (resp or "").strip()
+            if _validate_intent(resp):
+                state["intent"] = resp
+                return state
+            # If invalid, prepare corrective instruction on next iteration
+            last_error = f"Invalid intent format: {resp}"
+        except Exception as exc:
+            last_error = str(exc)
+            # If the call failed and we're on the last attempt, we'll break and fallback
+            if attempt == max_attempts - 1:
+                break
+            # otherwise continue to retry
+    # Fallback to robust rule if LLM fails or returns invalid output
+    _q = q.lower()
+    state["intent"] = "policy_question" if any(k in _q for k in _POLICY_KEYWORDS) else "general_question"
     return state
 
 

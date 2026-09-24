@@ -19,7 +19,6 @@ from typing import List
 # Use the sentence-transformers library for embeddings
 from sentence_transformers import SentenceTransformer
 import chromadb
-from chromadb.config import Settings
 
 DATA_DIR = Path(__file__).resolve().parent / "docs"
 COLLECTION_NAME = "zepto_docs"
@@ -52,22 +51,15 @@ def main() -> None:
     print("Loading embedding model 'all-MiniLM-L6-v2'...")
     model = SentenceTransformer("all-MiniLM-L6-v2")
 
-    # Create a persistent Chroma client that stores its database under ./chroma_db
-    # Newer chromadb versions may deprecate certain Settings; try the preferred Settings call
+    # Create a persistent Chroma client using the current API.
+    # Keep the path and collection name consistent across ingest.py and graph.py.
     try:
-        settings = Settings(chroma_db_impl="duckdb+parquet", persist_directory=str(PERSIST_DIR))
-        client = chromadb.Client(settings=settings)
+        client = chromadb.PersistentClient(path=str(PERSIST_DIR))
+        print(f'Using chromadb.PersistentClient with persist path: {PERSIST_DIR}')
     except Exception as exc:
-        # Fall back to a more tolerant client creation so ingestion can proceed in this environment
-        print('Warning: chromadb.Settings client creation failed:', exc)
-        try:
-            # Try PersistentClient fallback (some chromadb versions provide this)
-            client = chromadb.PersistentClient(persist_directory=str(PERSIST_DIR))
-            print('Using chromadb.PersistentClient fallback')
-        except Exception:
-            # Final fallback to in-memory client (non-persistent)
-            print('PersistentClient not available; falling back to chromadb.Client() (in-memory).')
-            client = chromadb.Client()
+        print('Warning: chromadb.PersistentClient creation failed:', exc)
+        client = chromadb.Client()
+        print('Falling back to in-memory chromadb.Client()')
 
     # If the collection already exists, delete it so runs are idempotent and reproducible
     try:

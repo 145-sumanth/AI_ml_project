@@ -7,12 +7,16 @@
 
 from __future__ import annotations
 
-import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
-from support_assistant.schemas import AskRequest, AskResponse
-from support_assistant.graph import run_graph
+try:
+    from support_assistant.schemas import AskRequest, AskResponse
+    from support_assistant.graph import run_graph
+except ImportError:  # pragma: no cover - supports running from the module directory
+    from schemas import AskRequest, AskResponse
+    from graph import run_graph
 
 app = FastAPI(title="Support Assistant (Zepto policies)")
 
@@ -39,6 +43,59 @@ async def ask(req: AskRequest):
     confidence = float(state.get("confidence", 0.0) or 0.0)
 
     return AskResponse(answer=answer, sources=sources, confidence=confidence)
+
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    return HTMLResponse("""
+    <!doctype html>
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Zepto Support Assistant</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; background: #f5f5f5; }
+        .box { max-width: 700px; margin: auto; background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+        textarea { width: 100%; min-height: 100px; font-size: 1rem; }
+        button { padding: 0.7rem 1.2rem; font-size: 1rem; margin-top: 0.5rem; }
+        #result { margin-top: 1rem; white-space: pre-wrap; }
+      </style>
+    </head>
+    <body>
+      <div class="box">
+        <h2>Zepto Support Assistant</h2>
+        <textarea id="query" placeholder="Ask a policy question...">What is the delivery fee?</textarea>
+        <button id="askBtn">Ask</button>
+        <div id="result"></div>
+      </div>
+      <script>
+        document.getElementById('askBtn').addEventListener('click', async () => {
+          const q = document.getElementById('query').value.trim();
+          const result = document.getElementById('result');
+          result.textContent = 'Loading...';
+          try {
+            const response = await fetch('/ask', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ query: q })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.detail || 'Request failed');
+            }
+            result.textContent = JSON.stringify({
+              answer: data.answer,
+              sources: data.sources,
+              confidence: data.confidence
+            }, null, 2);
+          } catch (err) {
+            result.textContent = 'Error: ' + err.message;
+          }
+        });
+      </script>
+    </body>
+    </html>
+    """)
 
 
 if __name__ == "__main__":
