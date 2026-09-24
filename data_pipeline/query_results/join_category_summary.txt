@@ -1,0 +1,6 @@
+SELECT c.category_name, COUNT(*) AS book_count FROM books b JOIN categories c ON c.category_id = b.category_id GROUP BY c.category_name ORDER BY book_count DESC;
+
+     category_name  book_count
+           Mystery          32
+Historical Fiction          17
+            Travel          11

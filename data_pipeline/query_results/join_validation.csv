@@ -1,0 +1,61 @@
+book_id,title,price_gbp,category_id,category_name
+44,Tipping the Velvet,53.74,1,Historical Fiction
+45,Forever and Forever: The Courtship of Henry Longfellow and Fanny Appleton,29.69,1,Historical Fiction
+46,A Flight of Arrows (The Pathfinders #2),55.53,1,Historical Fiction
+47,The House by the Lake,36.95,1,Historical Fiction
+48,Mrs. Houdini,30.25,1,Historical Fiction
+49,The Marriage of Opposites,28.08,1,Historical Fiction
+50,Glory over Everything: Beyond The Kitchen House,45.84,1,Historical Fiction
+51,"Love, Lies and Spies",20.55,1,Historical Fiction
+52,A Paris Apartment,39.01,1,Historical Fiction
+53,Lilac Girls,17.28,1,Historical Fiction
+54,The Constant Princess (The Tudor Court #1),16.62,1,Historical Fiction
+55,The Invention of Wings,37.34,1,Historical Fiction
+56,World Without End (The Pillars of the Earth #2),32.97,1,Historical Fiction
+57,The Passion of Dolssa,28.32,1,Historical Fiction
+58,Girl With a Pearl Earring,26.77,1,Historical Fiction
+59,Voyager (Outlander #3),21.07,1,Historical Fiction
+60,The Red Tent,35.66,1,Historical Fiction
+12,Sharp Objects,47.82,2,Mystery
+13,"In a Dark, Dark Wood",19.63,2,Mystery
+14,The Past Never Ends,56.5,2,Mystery
+15,A Murder in Time,16.64,2,Mystery
+16,The Murder of Roger Ackroyd (Hercule Poirot #4),44.1,2,Mystery
+17,The Last Mile (Amos Decker #2),54.21,2,Mystery
+18,That Darkness (Gardiner and Renner #1),13.92,2,Mystery
+19,Tastes Like Fear (DI Marnie Rome #3),10.69,2,Mystery
+20,A Time of Torment (Charlie Parker #14),48.35,2,Mystery
+21,A Study in Scarlet (Sherlock Holmes #1),16.73,2,Mystery
+22,Poisonous (Max Revere Novels #3),26.8,2,Mystery
+23,Murder at the 42nd Street Library (Raymond Ambler #1),54.36,2,Mystery
+24,Most Wanted,35.28,2,Mystery
+25,Hide Away (Eve Duncan #20),11.84,2,Mystery
+26,Boar Island (Anna Pigeon #19),59.48,2,Mystery
+27,The Widow,27.26,2,Mystery
+28,Playing with Fire,13.71,2,Mystery
+29,What Happened on Beale Street (Secrets of the South Mysteries #2),25.37,2,Mystery
+30,The Bachelor Girl's Guide to Murder (Herringford and Watts Mysteries #1),52.3,2,Mystery
+31,Delivering the Truth (Quaker Midwife Mystery #1),20.89,2,Mystery
+32,The Mysterious Affair at Styles (Hercule Poirot #1),24.8,2,Mystery
+33,In the Woods (Dublin Murder Squad #1),38.38,2,Mystery
+34,The Silkworm (Cormoran Strike #2),23.05,2,Mystery
+35,The Exiled,43.45,2,Mystery
+36,The Cuckoo's Calling (Cormoran Strike #1),19.21,2,Mystery
+37,Extreme Prey (Lucas Davenport #26),25.4,2,Mystery
+38,Career of Evil (Cormoran Strike #3),24.72,2,Mystery
+39,The No. 1 Ladies' Detective Agency (No. 1 Ladies' Detective Agency #1),57.7,2,Mystery
+40,The Girl You Lost,12.29,2,Mystery
+41,The Girl In The Ice (DCI Erika Foster #1),15.85,2,Mystery
+42,Blood Defense (Samantha Brinkman #1),20.3,2,Mystery
+43,1st to Die (Women's Murder Club #1),53.98,2,Mystery
+1,It's Only the Himalayas,45.17,3,Travel
+2,Full Moon over Noah’s Ark: An Odyssey to Mount Ararat and Beyond,49.43,3,Travel
+3,See America: A Celebration of Our National Parks & Treasured Sites,48.87,3,Travel
+4,Vagabonding: An Uncommon Guide to the Art of Long-Term World Travel,36.94,3,Travel
+5,Under the Tuscan Sun,37.33,3,Travel
+6,A Summer In Europe,44.34,3,Travel
+7,The Great Railway Bazaar,30.54,3,Travel
+8,A Year in Provence (Provence #1),56.88,3,Travel
+9,The Road to Little Dribbling: Adventures of an American in Britain (Notes From a Small Island #2),23.21,3,Travel
+10,Neither Here nor There: Travels in Europe,38.95,3,Travel
+11,"1,000 Places to See Before You Die",26.08,3,Travel
